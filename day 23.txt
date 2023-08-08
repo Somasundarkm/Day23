@@ -1,0 +1,408 @@
+This step is important when having products with some sort of variance. If you have a product without variances, you can proceed to Step 2. — otherwise you will need to add product variances in your Chec Dashboard. In this example store selling t-shirts, most likely you'll have different sizes and colors. To keep it simple let's provide one variant and three options of Small, Medium, Large. Once you click on a product, select the options tab ...
+
+It's important to note that you shouldn't add a price in this section unless a particular variant yields an increase in price. So in this case no matter which size you select, the price remains $25. Save those changes and let's see how to handle this in your code!
+
+
+
+Handling Variants in the code
+
+
+// *** ProductCard.js ***
+
+    useEffect(() => {        
+
+        let finalSizeArray = props.product.variants[0].options.map(option => {
+            let sizeInfo = {}
+
+            sizeInfo.key = option.name
+            sizeInfo.text = option.name
+            sizeInfo.value = option.id
+
+            return sizeInfo
+        })
+
+        setSizes(finalSizeArray)
+    }, [])
+
+The purpose of the useEffect() here is that the <Dropdown /> Semantic UI component needs options to select. The useEffect() allows you to map through the variant options and create your options array before the render. It's important to note that here, the value to the option.id has been set because that is data needed to add a product (and it's variant) to the cart. Once complete, add that value to state so our <Dropdown /> component can access it.
+
+
+
+<Card>
+    <Image src={props.product.media.source} />
+    <Card.Content>
+        <Card.Header>{props.product.name}</Card.Header>
+        <Card.Meta>{props.product.price.formatted_with_symbol}</Card.Meta>
+        <Card.Description>{props.product.description.replace(/(<([^>]+)>)/ig,"")}</Card.Description>
+        <Dropdown
+            className="sizes-drop"
+            onChange={handleSize}
+            value={sizes.text}
+            fluid
+            placeholder='Select Size'
+            selection
+            options={sizes}
+        />
+    </Card.Content>
+</Card>
+
+
+
+// *** ProductCard.js ***
+
+const [variantInfo, setVariantInfo] = useState()
+
+const handleSize = (e, {value}) => {
+    setVariantInfo({[props.product.variants[0].id]: value})
+}
+
+
+
+ Addding Product to Cart:
+
+
+// *** App.js ***
+
+const addToCart = (productId, variantInfo) => {
+
+    if(variantInfo) {
+        commerce.cart.add(productId, 1, variantInfo)
+            .then(res => {
+                setCart(res.cart)
+            })
+    } else {
+        window.alert('Please Select a Shirt Size')
+    }
+}
+
+
+
+There is some logic to make sure the user selects a variant (it's required to select a variant in order to add it to the cart). Note that the quantity has been hard-code to 1 because the cart page is where a customer can change the quantity. Lastly, upon a successful response you'll want to add the cart object to the global cart state.
+
+function App() {
+
+    const commerce = new Commerce(process.env.REACT_APP_PUBLICKEY_SANDBOX)
+
+    const [cart, setCart] = useState()
+
+    useEffect(() => {
+        commerce.cart.retrieve()
+            .then(res => {
+                setCart(res)
+            })
+    },[])
+
+    const addToCart = (productId, variantInfo) => {
+
+        if(variantInfo) {
+            commerce.cart.add(productId, 1, variantInfo)
+                .then(res => {
+                    setCart(res.cart)
+                })
+        } else {
+            window.alert('Please Select a Shirt Size')
+        }
+    }
+
+    return (
+        <div className="App">
+            <Nav cart={cart} emptyCart={emptyCart}/>
+            <Grid centered stackable padded relaxed>
+                <Grid.Column className='left-column' width={5}>
+                    <LeftPanel />
+                </Grid.Column>
+                <Grid.Column width={9}>
+                    <ProductContainer 
+                        addToCart={addToCart} 
+                    />
+                </Grid.Column>
+            </Grid>
+            <Footer />
+        </div>
+  );
+}
+
+
+Now that you have everything setup in your <App /> and have also passed the addToCart() function to the proper component - you will need to create a button that will trigger the function and add the product (and its variant) to the cart, and also update your state cart object.
+
+
+// *** ProductCard.js ***
+
+const handleButtonAddCart = e => {
+    e.preventDefault()
+    props.addToCart(props.product.id, variantInfo)
+}
+
+<Button fluid className='add-button' onClick={handleButtonAddCart}>
+    Add to Cart
+    <Icon name='arrow right' />
+</Button>
+
+
+Add Cart Notification
+
+
+Display for Empty Cart
+
+The cart object has all the necessary data required to display what's needed to the customer. And, if you recall because you are updating the cart object in state whenever there are changes, you can attach key data to the cart object and ensure that the cart information is correct.
+
+Here's a look at the cart object with key data points underlined ...
+
+const iconDisplay = () => {
+
+    if (props.cart && props.cart.total_unique_items > 0) {
+        return(
+            <Label color='green' >
+                <Icon name='shopping cart' size='big'/>
+                {props.cart.total_unique_items}
+            </Label>
+        )
+    } else {
+        return (
+            <Icon name='shopping cart' size='large'/>
+        )
+    }
+}
+
+
+
+There is a function here that returns some JSX depending on the value of props.cart.total_unique_items. Semantic UI (React) has a <Modal /> component that you will use to display our cart modal. There's a trigger attribute that takes a JSX element that when clicked will pop up the modal. Now, just pass your iconDisplay() function to the trigger.
+
+
+As you can see, this passes the cart object as a prop to the <CartModal /> component that will be used later to display any items/products that are in the cart. In your <CartModal /> component, there will be more logic based on the value of props.cart.total_unique_items.
+
+It's important to distinct between total_items and total_unique_items, we only care about the **unique*** items because those are the items that get displayed.*
+
+Let's take a look at your <CartModal /> component and setup what will get displayed if the total_unique_items is zero:
+
+
+// *** CartModal.js ***
+
+{props.cart && props.cart.total_unique_items > 0 ? (
+    <>
+        //This is what we will display if there are any items/products 
+        //in our cart
+    </>
+) 
+:
+(
+    // This is our Modal when there are ZERO items/products in our cart
+
+    <>
+        <Modal.Header>Seities Apparel Cart</Modal.Header>
+        <Modal.Content image>
+            <Image wrapped size='huge' src={cartImg} />
+            <Modal.Description>
+                <Header>Your Cart is currently Empty</Header>
+                <p>
+                    It would make you very happy if you added an item to the cart
+                </p>
+            </Modal.Description>
+        </Modal.Content>
+    </>
+)}
+
+
+Listing Items/Products in Cart:
+
+
+Now it's time to add code so that you can display any items/products in the cart. Create another component <CartItems /> that will be used to render your data. If you recall, you've been passing your cart object in state - but for THESE items, you only need data about each item. The Commerce.js SDK wonderfully provides all necessary data within the line_items property. Take a look:
+
+In order to make sure you're listing all items in the cart, you need to map over the line_items property and send each item down to your <CartItems /> component.
+
+
+// *** CartModal.js ***
+
+{props.cart && props.cart.total_unique_items > 0 ? (
+    <>
+        <Item.Group divided>
+            {props.cart.line_items.map(item => (
+                <Item key={item.id}>
+                    <CartItems item={item}/>
+                </Item>
+            ))}
+        </Item.Group>
+    </>
+)
+
+
+return (
+    // *** CartItems.js ***
+
+    <>
+        <Item.Image size='tiny' src={props.item.media.source} />
+        <Item.Content verticalAlign='middle'>
+            <Item.Header>{props.item.name}</Item.Header>
+            <Item.Meta>
+                <span>{props.item.variants[0].option_name}</span>
+            </Item.Meta>
+            <Item.Extra className='item-total'>
+                <Header floated='right'>${props.item.line_total.formatted_with_symbol}</Header>
+            </Item.Extra>
+        </Item.Content>
+    </>
+);
+
+
+
+Function to handle action (empty cart)
+
+
+
+/ *** App.js ***
+
+const emptyCart = () => {
+    commerce.cart.empty()
+        .then(res => {
+            setCart(null)
+        })
+}
+
+//Passing function as prop App -> Nav
+<Nav cart={cart} emptyCart={emptyCart} />
+
+
+// *** CartModal.js *** Adding function to handle click
+<Button  
+    basic 
+    negative  
+    floated='left' 
+    onClick={props.emptyCart}
+>
+
+
+
+Add Functionality to Increase/Decrease Quanity:
+
+
+Lastly, it's time to add the capability to increase/descrease the item quanity. This is important to allow customers to adjust quanity before the checkout. Again, let's reference the pattern once more!
+
+add an action button - write a function to handle said action, then pass that function to the component that needs it
+
+Let's add the necessary buttons ...
+Buttons will be added in your <CartItems /> component. There are many ways to present this feature, but for this example, let's use three elements:
+
+Minus button
+Input
+Add button
+    // *** CartItems.js ***
+
+return (
+    <>
+        <Item.Image size='tiny' src={props.item.media.source} />
+        <Item.Content verticalAlign='middle'>
+            <Item.Header>{props.item.name}</Item.Header>
+            <Item.Meta>
+                <span>{props.item.variants[0].option_name}</span>
+            </Item.Meta>
+
+            // New Added Elements
+            <div className='quanity-group'>
+                <Button
+                    negative 
+                    className='quan-buttons' 
+                > 
+                    <Icon name='minus' /> 
+                </Button>
+                <Input 
+                    className='input-quanity'
+                    value={props.item.quantity} 
+                />
+                <Button
+                    positive 
+                    className='quan-buttons'
+                > 
+                    <Icon name='plus' /> 
+                </Button>
+            </div>
+            <Item.Extra className='item-total'>
+                <Header floated='right'>${props.item.line_total.formatted_with_symbol}</Header>
+            </Item.Extra>
+        </Item.Content>
+    </>
+);
+Hardcoding the initial quanity, brings that value from props and sets it as an input value.
+
+// *** CartItems.js ***
+
+<Input 
+    className='input-quanity'
+    value={props.item.quantity} 
+/>
+Another important addition is the line_total which correlates to the total amount based on quanity.
+
+// *** CartItems.js ***
+
+<Item.Extra className='item-total'>
+    <Header floated='right'>${props.item.line_total.formatted_with_symbol}</Header>
+</Item.Extra>
+
+
+Creating Functions for each action
+
+Now that you have the quantity buttons displaying properly, write the functions utilizing the Commerce.js SDK cart methods. As mentioned you'll want to write these functions in the <App /> component where the cart object in state lives.
+
+// *** App.js ***
+
+const cartHelperFunctions = {
+
+    deleteItem: (lineItemId) => {
+        commerce.cart.remove(lineItemId)
+            .then(res => {
+                setCart(res.cart)
+            })
+    },
+    addQaunity: (lineItemId, newQuanity) => {
+        commerce.cart.update(lineItemId, {quantity: newQuanity})
+            .then(res => {
+                setCart(res.cart)
+
+            })
+    },
+    subtractQuanity: (lineItemId, newQuanity) => {
+
+        if (newQuanity === 0) {
+            cartHelperFunctions.deleteItem(lineItemId)
+        } else {
+            commerce.cart.update(lineItemId, {quantity: newQuanity})
+                .then(res => {
+                    setCart(res.cart)
+                })
+        }
+
+    }
+}
+
+
+
+// *** CartItems.js ***
+
+<div className='quanity-group'>
+    <Button
+        negative 
+        className='quan-buttons' 
+        onClick={() => {
+            let newQuanity = props.item.quantity - 1
+            helpFnc.subtractQuanity(props.item.id, newQuanity)
+        }}
+    > 
+        <Icon name='minus' /> 
+    </Button>
+    <Input 
+        className='input-quanity'
+        value={props.item.quantity} 
+    />
+    <Button
+        positive 
+        className='quan-buttons'
+        onClick={() => {
+            let newQuanity = props.item.quantity + 1
+            helpFnc.addQaunity(props.item.id, newQuanity)
+        }}
+    > 
+        <Icon name='plus' /> 
+    </Button>
+</div>
+You can calcuate the newQaunity and pass that data along with the item.id.
+
+Once complete you should have full cart functionality!
